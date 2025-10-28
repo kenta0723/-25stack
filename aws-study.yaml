@@ -1,0 +1,167 @@
+AWSTemplateFormatVersion:  "2010-09-09"
+Description:  VPCとEC2を作って起動できるかの確認。
+
+Resources:
+
+  #VPC
+
+  AWSstudyvpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Value: AWS-study-vpc
+          Key: Name
+      InstanceTenancy: default
+
+  #Subnet
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AWSstudyvpc
+      AvailabilityZone:  !Select [0, !GetAZs ''] 
+      CidrBlock: 10.0.0.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Value:  AWS-Study-PublicSubnet1 
+          Key: Name
+  
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:  !Ref AWSstudyvpc
+      AvailabilityZone:  !Select [1, !GetAZs '']
+      CidrBlock: 10.0.16.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key:  Name
+          Value:  AWS-Study-PublicSubnet2
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:  !Ref AWSstudyvpc
+      AvailabilityZone:  !Select [0, !GetAZs '']
+      CidrBlock: 10.0.128.0/20
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key:  Name
+          Value:  AWS-Study-PrivateSubnet1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:  !Ref AWSstudyvpc
+      AvailabilityZone:  !Select [1, !GetAZs '']
+      CidrBlock: 10.0.144.0/20
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key:  Name
+          Value:  AWS-Study-PrivateSubnet2
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGrouptest
+      VpcId:  !Ref AWSstudyvpc
+      SecurityGroupIngress: 
+        - IpProtocol: tcp 
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value:  AWS-Study-EC2-SG
+
+  InstanceSecurityGroupRuleHttp: 
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:  !Ref InstanceSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+
+  InstanceSecurityGroupRuleHttps:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:  !Ref InstanceSecurityGroup
+      IpProtocol:  tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+
+  myInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: AWS-Study-EC2-IGW
+
+  myInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId:  !Ref myInternetGateway
+      VpcId:  !Ref AWSstudyvpc
+
+  MyEC2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: AWS-Study-EIP 
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:  !GetAtt  MyEC2EIP.AllocationId
+      SubnetId:  !Ref PublicSubnet1
+      Tags:
+        - Key:  Name
+          Value:  AWS-Study-NatGateway
+
+  myRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  !Ref AWSstudyvpc
+      Tags:
+        - Key: Name
+          Value: AWS-Study-RouteTable
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  myRoute:
+    Type: AWS::EC2::Route
+    DependsOn: 
+      - myInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref myRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref myInternetGateway
+
+  myEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0228232d282f16465 
+      InstanceType: t3.micro
+      SubnetId: !Ref PublicSubnet1
+      SecurityGroupIds: 
+      - !Ref InstanceSecurityGroup
+      KeyName:  AWS_key
+      Tags:
+        - Key: Name
+          Value: AWS-Study-EC2Instance
