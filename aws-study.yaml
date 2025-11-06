@@ -1,11 +1,31 @@
 AWSTemplateFormatVersion:  "2010-09-09"
 Description:  VPCとEC2を作って起動できるかの確認。
 
-Resources:
 
-  #VPC
+  #------#外部入力が必要な箇所用------
+Parameters: 
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instance
+    Type: "AWS::EC2::KeyPair::KeyName"
 
-  AWSstudyvpc:
+  DBmasterName:
+    Description: DBmasterName
+    Type: String
+
+  DBmasterPassword:
+    Description: DBMasterPassword
+    NoEcho: true #入力時パスワードの文字を隠すことが出来るか
+    Type: String
+  
+  MyIPAdoress:
+    Description: IPAdoless(123.456.xxx.xxx/32)
+    Type: String
+
+Resources: 
+
+  #------VPC-------
+
+  vpc:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
@@ -16,12 +36,12 @@ Resources:
           Key: Name
       InstanceTenancy: default
 
-  #Subnet
+  #------PublicSubnet------
 
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref AWSstudyvpc
+      VpcId: !Ref vpc
       AvailabilityZone:  !Select [0, !GetAZs ''] 
       CidrBlock: 10.0.0.0/20
       MapPublicIpOnLaunch: true
@@ -32,7 +52,7 @@ Resources:
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId:  !Ref AWSstudyvpc
+      VpcId:  !Ref vpc
       AvailabilityZone:  !Select [1, !GetAZs '']
       CidrBlock: 10.0.16.0/20
       MapPublicIpOnLaunch: true
@@ -40,10 +60,12 @@ Resources:
         - Key:  Name
           Value:  AWS-Study-PublicSubnet2
 
+  #-------PrivateSubnet------
+
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId:  !Ref AWSstudyvpc
+      VpcId:  !Ref vpc
       AvailabilityZone:  !Select [0, !GetAZs '']
       CidrBlock: 10.0.128.0/20
       MapPublicIpOnLaunch: false
@@ -54,7 +76,7 @@ Resources:
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId:  !Ref AWSstudyvpc
+      VpcId:  !Ref vpc
       AvailabilityZone:  !Select [1, !GetAZs '']
       CidrBlock: 10.0.144.0/20
       MapPublicIpOnLaunch: false
@@ -62,16 +84,29 @@ Resources:
         - Key:  Name
           Value:  AWS-Study-PrivateSubnet2
 
-  InstanceSecurityGroup:
+  #------DBSubnetGroup------
+  rdsDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: rdsDBSubnetGroup
+      DBSubnetGroupName: DBSubnetGroup
+      SubnetIds:
+        -  !Ref PrivateSubnet1
+        -  !Ref PrivateSubnet2
+
+
+  #------SecurityGroup------
+
+  EC2InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: SecurityGrouptest
-      VpcId:  !Ref AWSstudyvpc
+      VpcId:  !Ref vpc
       SecurityGroupIngress: 
         - IpProtocol: tcp 
           FromPort: 22
           ToPort: 22
-          CidrIp: 115.36.64.76/32
+          CidrIp: !Ref MyIPAdoress
       Tags:
         - Key: Name
           Value:  AWS-Study-EC2-SG
@@ -79,7 +114,7 @@ Resources:
   InstanceSecurityGroupRuleHttp: 
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
-      GroupId:  !Ref InstanceSecurityGroup
+      GroupId:  !Ref EC2InstanceSecurityGroup
       IpProtocol: tcp
       FromPort: 80
       ToPort: 80
@@ -88,11 +123,37 @@ Resources:
   InstanceSecurityGroupRuleHttps:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
-      GroupId:  !Ref InstanceSecurityGroup
+      GroupId:  !Ref EC2InstanceSecurityGroup
       IpProtocol:  tcp
       FromPort: 443
       ToPort: 443
       CidrIp: 0.0.0.0/0
+
+  InstanceSecurityGroupRulecustomTCP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:  !Ref EC2InstanceSecurityGroup
+      IpProtocol:  tcp
+      FromPort: 8080
+      ToPort: 8080
+      CidrIp: 0.0.0.0/0
+
+  #------RDSSeculityGroup------
+  rdsDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId:  !Ref vpc
+      GroupDescription: rdsDBSecurityGroup
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId:  !Ref EC2InstanceSecurityGroup
+      Tags:
+        - Key: Name
+          Value: AWS-Study-db-sg
+
+  #------IGW-------
 
   myInternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -105,7 +166,7 @@ Resources:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       InternetGatewayId:  !Ref myInternetGateway
-      VpcId:  !Ref AWSstudyvpc
+      VpcId:  !Ref vpc
 
   MyEC2EIP:
     Type: AWS::EC2::EIP
@@ -114,6 +175,8 @@ Resources:
       Tags:
         - Key: Name
           Value: AWS-Study-EIP 
+
+  #------NatGateway------
 
   NatGateway:
     Type: AWS::EC2::NatGateway
@@ -124,10 +187,12 @@ Resources:
         - Key:  Name
           Value:  AWS-Study-NatGateway
 
+  #------RouteTable------
+
   myRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId:  !Ref AWSstudyvpc
+      VpcId:  !Ref vpc
       Tags:
         - Key: Name
           Value: AWS-Study-RouteTable
@@ -153,6 +218,8 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref myInternetGateway
 
+  #------EC2------
+
   myEC2Instance:
     Type: AWS::EC2::Instance
     Properties:
@@ -160,8 +227,90 @@ Resources:
       InstanceType: t3.micro
       SubnetId: !Ref PublicSubnet1
       SecurityGroupIds:
-        -  !Ref InstanceSecurityGroup 
-      KeyName:  AWS_key
+        -  !Ref EC2InstanceSecurityGroup 
+      KeyName:  !Ref KeyName
       Tags:
         - Key: Name
           Value: AWS-Study-EC2Instance
+
+  #-------RDS-------
+
+  Datebase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: 20 #ストレージ量
+      MaxAllocatedStorage: 1000
+      DBInstanceClass: db.t4g.micro
+      AvailabilityZone:  !Select [0, !GetAZs '']
+      BackupRetentionPeriod: 1
+      DBInstanceIdentifier: aws-study-rds #RDSインスタンスの名前（DBインスタンス識別子）
+      DBName: awsstudydb #データベースの名前
+      DBSubnetGroupName:  !Ref rdsDBSubnetGroup
+      Engine: mysql
+      EngineVersion: 8.0.39
+      MasterUsername:  !Ref DBmasterName
+      MasterUserPassword:  !Ref DBmasterPassword
+      PubliclyAccessible: false
+      StorageEncrypted: true
+      StorageType: gp3
+      VPCSecurityGroups:
+        -  !Ref rdsDBSecurityGroup
+      Tags:
+        - Key: name
+          Value: AWS-Study-RDS
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+
+  
+  #------TargetGroup------
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      TargetType: instance
+      Name: aws-study-tg
+      Protocol: HTTP
+      Port: 80
+      VpcId:  !Ref vpc
+      ProtocolVersion: HTTP1
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      HealthCheckPort: traffic-port
+      HealthCheckIntervalSeconds: 30
+      Matcher:
+        HttpCode: '200,300,301'
+      Targets:
+        - Id:  !Ref myEC2Instance
+          Port: 80
+        - Id:  !Ref myEC2Instance
+          Port: 8080
+      Tags:
+        - Key: Name
+          Value: AWS-Study-tg
+
+  #------ALB------
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: aws-study-alb
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      Subnets:
+      - !Ref PublicSubnet1
+      - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref EC2InstanceSecurityGroup
+      
+  #-------ListenerLule-------
+  ALBlistener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Protocol: HTTP
+      Port: 80
+      LoadBalancerArn:  !Ref ALB
+      DefaultActions:
+        - Type: forward #ここはAWS::~ではなく、あくまでアクションのタイプ
+          TargetGroupArn:  !Ref TargetGroup
+      
