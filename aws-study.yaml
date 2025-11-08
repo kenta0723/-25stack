@@ -100,7 +100,7 @@ Resources:
   EC2InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: SecurityGrouptest
+      GroupDescription: SecurityGroup
       VpcId:  !Ref vpc
       SecurityGroupIngress: 
         - IpProtocol: tcp 
@@ -118,7 +118,7 @@ Resources:
       IpProtocol: tcp
       FromPort: 80
       ToPort: 80
-      CidrIp: 0.0.0.0/0
+      SourceSecurityGroupId: !Ref ALBSeculityGroup
 
   InstanceSecurityGroupRuleHttps:
     Type: AWS::EC2::SecurityGroupIngress
@@ -127,7 +127,7 @@ Resources:
       IpProtocol:  tcp
       FromPort: 443
       ToPort: 443
-      CidrIp: 0.0.0.0/0
+      SourceSecurityGroupId: !Ref ALBSeculityGroup
 
   InstanceSecurityGroupRulecustomTCP:
     Type: AWS::EC2::SecurityGroupIngress
@@ -136,7 +136,7 @@ Resources:
       IpProtocol:  tcp
       FromPort: 8080
       ToPort: 8080
-      CidrIp: 0.0.0.0/0
+      SourceSecurityGroupId: !Ref ALBSeculityGroup
 
   #------RDSSeculityGroup------
   rdsDBSecurityGroup:
@@ -152,6 +152,26 @@ Resources:
       Tags:
         - Key: Name
           Value: AWS-Study-db-sg
+
+  #------ALBSeculityGroup------
+  ALBSeculityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALBSeculityGroup
+      VpcId:  !Ref vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp 
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp 
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: AWS-Study-ALB-SG 
+
 
   #------IGW-------
 
@@ -175,17 +195,6 @@ Resources:
       Tags:
         - Key: Name
           Value: AWS-Study-EIP 
-
-  #------NatGateway------
-
-  NatGateway:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId:  !GetAtt  MyEC2EIP.AllocationId
-      SubnetId:  !Ref PublicSubnet1
-      Tags:
-        - Key:  Name
-          Value:  AWS-Study-NatGateway
 
   #------RouteTable------
 
@@ -227,7 +236,7 @@ Resources:
       InstanceType: t3.micro
       SubnetId: !Ref PublicSubnet1
       SecurityGroupIds:
-        -  !Ref EC2InstanceSecurityGroup 
+        -  !Ref EC2InstanceSecurityGroup
       KeyName:  !Ref KeyName
       Tags:
         - Key: Name
@@ -301,7 +310,7 @@ Resources:
       - !Ref PublicSubnet1
       - !Ref PublicSubnet2
       SecurityGroups:
-        - !Ref EC2InstanceSecurityGroup
+        - !Ref ALBSeculityGroup
       
   #-------ListenerLule-------
   ALBlistener:
