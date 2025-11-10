@@ -2,7 +2,7 @@ AWSTemplateFormatVersion:  "2010-09-09"
 Description:  VPCとEC2を作って起動できるかの確認。
 
 
-  #------#外部入力が必要な箇所用------
+  #------外部入力が必要な箇所用------
 Parameters: 
   KeyName:
     Description: The EC2 Key Pair to allow SSH access to the instance
@@ -17,8 +17,8 @@ Parameters:
     NoEcho: true #入力時パスワードの文字を隠すことが出来るか
     Type: String
   
-  MyIPAdoress:
-    Description: IPAdoless(123.456.xxx.xxx/32)
+  MyIPAddress:
+    Description: IPAddless(123.456.xxx.xxx/32)
     Type: String
 
 Resources: 
@@ -100,13 +100,13 @@ Resources:
   EC2InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: SecurityGrouptest
+      GroupDescription: SecurityGroup
       VpcId:  !Ref vpc
       SecurityGroupIngress: 
         - IpProtocol: tcp 
           FromPort: 22
           ToPort: 22
-          CidrIp: !Ref MyIPAdoress
+          CidrIp: !Ref MyIPAddress
       Tags:
         - Key: Name
           Value:  AWS-Study-EC2-SG
@@ -118,7 +118,7 @@ Resources:
       IpProtocol: tcp
       FromPort: 80
       ToPort: 80
-      CidrIp: 0.0.0.0/0
+      SourceSecurityGroupId: !Ref ALBSecurityGroup
 
   InstanceSecurityGroupRuleHttps:
     Type: AWS::EC2::SecurityGroupIngress
@@ -127,7 +127,7 @@ Resources:
       IpProtocol:  tcp
       FromPort: 443
       ToPort: 443
-      CidrIp: 0.0.0.0/0
+      SourceSecurityGroupId: !Ref ALBSecurityGroup
 
   InstanceSecurityGroupRulecustomTCP:
     Type: AWS::EC2::SecurityGroupIngress
@@ -136,9 +136,9 @@ Resources:
       IpProtocol:  tcp
       FromPort: 8080
       ToPort: 8080
-      CidrIp: 0.0.0.0/0
+      SourceSecurityGroupId: !Ref ALBSecurityGroup
 
-  #------RDSSeculityGroup------
+  #------RDSSecurityGroup------
   rdsDBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -152,6 +152,26 @@ Resources:
       Tags:
         - Key: Name
           Value: AWS-Study-db-sg
+
+  #------ALBSecurityGroup------
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALBSecurityGroup
+      VpcId:  !Ref vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp 
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp 
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: AWS-Study-ALB-SG 
+
 
   #------IGW-------
 
@@ -175,17 +195,6 @@ Resources:
       Tags:
         - Key: Name
           Value: AWS-Study-EIP 
-
-  #------NatGateway------
-
-  NatGateway:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId:  !GetAtt  MyEC2EIP.AllocationId
-      SubnetId:  !Ref PublicSubnet1
-      Tags:
-        - Key:  Name
-          Value:  AWS-Study-NatGateway
 
   #------RouteTable------
 
@@ -227,7 +236,7 @@ Resources:
       InstanceType: t3.micro
       SubnetId: !Ref PublicSubnet1
       SecurityGroupIds:
-        -  !Ref EC2InstanceSecurityGroup 
+        -  !Ref EC2InstanceSecurityGroup
       KeyName:  !Ref KeyName
       Tags:
         - Key: Name
@@ -235,7 +244,7 @@ Resources:
 
   #-------RDS-------
 
-  Datebase:
+  Database:
     Type: AWS::RDS::DBInstance
     Properties:
       AllocatedStorage: 20 #ストレージ量
@@ -256,7 +265,7 @@ Resources:
       VPCSecurityGroups:
         -  !Ref rdsDBSecurityGroup
       Tags:
-        - Key: name
+        - Key: Name
           Value: AWS-Study-RDS
     DeletionPolicy: Snapshot
     UpdateReplacePolicy: Snapshot
@@ -301,9 +310,9 @@ Resources:
       - !Ref PublicSubnet1
       - !Ref PublicSubnet2
       SecurityGroups:
-        - !Ref EC2InstanceSecurityGroup
+        - !Ref ALBSecurityGroup
       
-  #-------ListenerLule-------
+  #-------ListenerRule-------
   ALBlistener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
